@@ -63,36 +63,36 @@ L_VEC = [148, 32, 133, 16, 194, 192, 1, 251,
 
 
 def xor_bytes(a, b):
-    """Побитовое XOR двух байтовых последовательностей одинаковой длины."""
+    """Выполняет побайтовое XOR двух последовательностей."""
     return bytes(x ^ y for x, y in zip(a, b))
 
 
 def gf_mul(a, b):
-    """Умножение двух байтов в поле GF(2^8) с модулем x^8 + x^7 + x^6 + x + 1."""
+    """Умножает два байта в поле GF(2^8)."""
     res = 0
     for _ in range(8):
         if b & 1:
             res ^= a
-        hi = a & 0x80
+        high_bit = a & 0x80
         a = (a << 1) & 0xFF
-        if hi:
+        if high_bit:
             a ^= 0xC3
         b >>= 1
     return res
 
 
 def s_transform(data):
-    """Прямое S-преобразование: замена каждого байта по таблице PI."""
+    """Прямое S-преобразование."""
     return bytes(PI[b] for b in data)
 
 
 def s_inv_transform(data):
-    """Обратное S-преобразование: замена каждого байта по таблице PI_INV."""
+    """Обратное S-преобразование."""
     return bytes(PI_INV[b] for b in data)
 
 
 def r_transform(state):
-    """Однократное R-преобразование для 16-байтного состояния."""
+    """Однократное R-преобразование."""
     x = 0
     for i in range(16):
         x ^= gf_mul(state[i], L_VEC[i])
@@ -110,7 +110,7 @@ def r_inv_transform(state):
 
 
 def l_transform(data):
-    """Прямое L-преобразование: 16 последовательных R-преобразований."""
+    """Прямое L-преобразование."""
     result = data
     for _ in range(16):
         result = r_transform(result)
@@ -118,7 +118,7 @@ def l_transform(data):
 
 
 def l_inv_transform(data):
-    """Обратное L-преобразование: 16 обратных R-преобразований."""
+    """Обратное L-преобразование."""
     result = data
     for _ in range(16):
         result = r_inv_transform(result)
@@ -126,7 +126,7 @@ def l_inv_transform(data):
 
 
 def generate_constants():
-    """Генерация 32 итерационных констант для развёртывания ключа."""
+    """Генерирует 32 константы для развёртывания ключа."""
     constants = []
     for i in range(1, 33):
         c = bytearray(16)
@@ -135,9 +135,9 @@ def generate_constants():
     return constants
 
 
-def f_transform(k1, k2, c):
-    """Преобразование F в алгоритме генерации раундовых ключей."""
-    temp = xor_bytes(k1, c)
+def f_transform(k1, k2, constant):
+    """Преобразование F для генерации раундовых ключей."""
+    temp = xor_bytes(k1, constant)
     temp = s_transform(temp)
     temp = l_transform(temp)
     temp = xor_bytes(temp, k2)
@@ -145,30 +145,26 @@ def f_transform(k1, k2, c):
 
 
 def expand_key(master_key):
-    """Генерация 10 раундовых ключей из исходного 256-битного ключа."""
+    """Разворачивает исходный ключ в 10 раундовых ключей."""
     if len(master_key) != 32:
-        raise ValueError("Ключ должен содержать 32 байта (64 hex-символа).")
+        raise ValueError("Ключ должен содержать 32 байта.")
 
-    k1 = master_key[:16]
-    k2 = master_key[16:]
-    round_keys = [k1, k2]
-
+    left = master_key[:16]
+    right = master_key[16:]
+    keys = [left, right]
     constants = generate_constants()
 
-    for i in range(4):
-        for j in range(8):
-            k1, k2 = f_transform(k1, k2, constants[i * 8 + j])
-        round_keys.append(k1)
-        round_keys.append(k2)
+    for group in range(4):
+        for step in range(8):
+            left, right = f_transform(left, right, constants[group * 8 + step])
+        keys.append(left)
+        keys.append(right)
 
-    return round_keys
+    return keys
 
 
 def encrypt_block(block, round_keys):
-    """Шифрование одного 16-байтного блока по алгоритму Кузнечик."""
-    if len(block) != BLOCK_SIZE:
-        raise ValueError("Размер блока для шифрования должен быть 16 байт.")
-
+    """Шифрует один блок длиной 16 байт."""
     state = block
     for i in range(9):
         state = xor_bytes(state, round_keys[i])
@@ -179,10 +175,7 @@ def encrypt_block(block, round_keys):
 
 
 def decrypt_block(block, round_keys):
-    """Расшифрование одного 16-байтного блока по алгоритму Кузнечик."""
-    if len(block) != BLOCK_SIZE:
-        raise ValueError("Размер блока для расшифрования должен быть 16 байт.")
-
+    """Расшифровывает один блок длиной 16 байт."""
     state = xor_bytes(block, round_keys[9])
     for i in range(8, -1, -1):
         state = l_inv_transform(state)
@@ -192,40 +185,40 @@ def decrypt_block(block, round_keys):
 
 
 def pad_data(data):
-    """Добавление PKCS#7 padding, только если длина данных не кратна 16 байтам."""
+    """Добавляет padding, только если длина данных не кратна 16 байтам."""
     if len(data) % BLOCK_SIZE == 0:
         return data
-    pad_len = BLOCK_SIZE - (len(data) % BLOCK_SIZE)
-    return data + bytes([pad_len] * pad_len)
+    padding_len = BLOCK_SIZE - (len(data) % BLOCK_SIZE)
+    return data + bytes([padding_len] * padding_len)
 
 
 def unpad_data(data):
-    """Удаление PKCS#7 padding, если он присутствует и корректен."""
+    """Удаляет padding, если он присутствует и корректен."""
     if not data:
         return data
 
-    pad_len = data[-1]
+    padding_len = data[-1]
 
-    if pad_len < 1 or pad_len > BLOCK_SIZE:
+    if padding_len < 1 or padding_len > BLOCK_SIZE:
         return data
 
-    if len(data) < pad_len:
+    if len(data) < padding_len:
         return data
 
-    if data[-pad_len:] == bytes([pad_len] * pad_len):
-        return data[:-pad_len]
+    if data[-padding_len:] == bytes([padding_len] * padding_len):
+        return data[:-padding_len]
 
     return data
 
 
 def read_text_file(path):
-    """Чтение исходного текстового содержимого файла без преобразований."""
-    with open(path, "r", encoding="utf-8") as f:
-        return f.read()
+    """Читает текстовый файл целиком."""
+    with open(path, "r", encoding="utf-8") as file:
+        return file.read()
 
 
 def read_hex_file(path):
-    """Чтение текстового файла с hex-данными и преобразование их в байты."""
+    """Читает hex-данные из текстового файла."""
     content = read_text_file(path)
     hex_data = "".join(content.split())
 
@@ -233,30 +226,82 @@ def read_hex_file(path):
         return b""
 
     if len(hex_data) % 2 != 0:
-        raise ValueError("Hex-данные в файле должны содержать чётное число символов.")
+        raise ValueError("Hex-данные должны содержать чётное количество символов.")
 
     try:
         return bytes.fromhex(hex_data)
     except ValueError:
-        raise ValueError("Файл содержит некорректные шестнадцатеричные данные.")
+        raise ValueError("Файл содержит некорректные hex-данные.")
 
 
 def write_hex_file(path, data):
-    """Запись байтовых данных в текстовый файл в виде hex-строки."""
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(data.hex())
+    """Записывает данные в файл в hex-формате."""
+    with open(path, "w", encoding="utf-8") as file:
+        file.write(data.hex())
 
 
 def print_file_content(label, path):
-    """Вывод содержимого текстового файла в консоль."""
+    """Выводит содержимое файла в консоль."""
     content = read_text_file(path)
     print(f"{label} ({path}):")
     print(content if content else "[пустой файл]")
     print()
 
 
-def encrypt_file(input_path, output_path, key_hex):
-    """Чтение hex-данных из файла, их шифрование и запись результата в hex-формате."""
+def encrypt_ecb(data, round_keys):
+    """Шифрует данные в режиме ECB."""
+    result = bytearray()
+    for i in range(0, len(data), BLOCK_SIZE):
+        result.extend(encrypt_block(data[i:i + BLOCK_SIZE], round_keys))
+    return bytes(result)
+
+
+def decrypt_ecb(data, round_keys):
+    """Расшифровывает данные в режиме ECB."""
+    result = bytearray()
+    for i in range(0, len(data), BLOCK_SIZE):
+        result.extend(decrypt_block(data[i:i + BLOCK_SIZE], round_keys))
+    return bytes(result)
+
+
+def encrypt_cbc(data, round_keys, iv):
+    """Шифрует данные в режиме CBC."""
+    if len(iv) != BLOCK_SIZE:
+        raise ValueError("IV для режима CBC должен быть длиной 16 байт.")
+
+    result = bytearray()
+    previous = iv
+
+    for i in range(0, len(data), BLOCK_SIZE):
+        block = data[i:i + BLOCK_SIZE]
+        mixed = xor_bytes(block, previous)
+        encrypted = encrypt_block(mixed, round_keys)
+        result.extend(encrypted)
+        previous = encrypted
+
+    return bytes(result)
+
+
+def decrypt_cbc(data, round_keys, iv):
+    """Расшифровывает данные в режиме CBC."""
+    if len(iv) != BLOCK_SIZE:
+        raise ValueError("IV для режима CBC должен быть длиной 16 байт.")
+
+    result = bytearray()
+    previous = iv
+
+    for i in range(0, len(data), BLOCK_SIZE):
+        block = data[i:i + BLOCK_SIZE]
+        decrypted = decrypt_block(block, round_keys)
+        plain = xor_bytes(decrypted, previous)
+        result.extend(plain)
+        previous = block
+
+    return bytes(result)
+
+
+def encrypt_file(input_path, output_path, key_hex, cipher_mode, iv_hex=None):
+    """Шифрует содержимое входного файла."""
     print_file_content("Содержимое входного файла", input_path)
 
     key = bytes.fromhex(key_hex)
@@ -269,18 +314,22 @@ def encrypt_file(input_path, output_path, key_hex):
 
     data = pad_data(data)
 
-    result = bytearray()
-    for i in range(0, len(data), BLOCK_SIZE):
-        block = data[i:i + BLOCK_SIZE]
-        result.extend(encrypt_block(block, round_keys))
+    if cipher_mode == "ecb":
+        result = encrypt_ecb(data, round_keys)
+    elif cipher_mode == "cbc":
+        if iv_hex is None:
+            raise ValueError("Для режима CBC необходимо указать IV.")
+        iv = bytes.fromhex(iv_hex)
+        result = encrypt_cbc(data, round_keys, iv)
+    else:
+        raise ValueError("Неподдерживаемый режим шифрования.")
 
-    write_hex_file(output_path, bytes(result))
-
+    write_hex_file(output_path, result)
     print_file_content("Содержимое выходного файла", output_path)
 
 
-def decrypt_file(input_path, output_path, key_hex):
-    """Чтение hex-шифртекста из файла, его расшифрование и запись результата в hex-формате."""
+def decrypt_file(input_path, output_path, key_hex, cipher_mode, iv_hex=None):
+    """Расшифровывает содержимое входного файла."""
     print_file_content("Содержимое входного файла", input_path)
 
     key = bytes.fromhex(key_hex)
@@ -294,38 +343,63 @@ def decrypt_file(input_path, output_path, key_hex):
     if len(data) % BLOCK_SIZE != 0:
         raise ValueError("Длина зашифрованных данных должна быть кратна 16 байтам.")
 
-    result = bytearray()
-    for i in range(0, len(data), BLOCK_SIZE):
-        block = data[i:i + BLOCK_SIZE]
-        result.extend(decrypt_block(block, round_keys))
+    if cipher_mode == "ecb":
+        result = decrypt_ecb(data, round_keys)
+    elif cipher_mode == "cbc":
+        if iv_hex is None:
+            raise ValueError("Для режима CBC необходимо указать IV.")
+        iv = bytes.fromhex(iv_hex)
+        result = decrypt_cbc(data, round_keys, iv)
+    else:
+        raise ValueError("Неподдерживаемый режим шифрования.")
 
-    result = unpad_data(bytes(result))
+    result = unpad_data(result)
+
     write_hex_file(output_path, result)
-
     print_file_content("Содержимое выходного файла", output_path)
 
 
 def print_usage():
-    """Вывод справки по использованию программы."""
+    """Печатает справку по запуску программы."""
     print("Использование:")
-    print("  python kuznechik.py encrypt <input_file> <output_file> <key_hex>")
-    print("  python kuznechik.py decrypt <input_file> <output_file> <key_hex>")
+    print("  python kuznechik.py encrypt ecb <input_file> <output_file> <key_hex>")
+    print("  python kuznechik.py decrypt ecb <input_file> <output_file> <key_hex>")
     print()
-    print("Файлы input/output должны содержать данные в шестнадцатеричном формате (hex).")
-    print("Их можно открывать и редактировать в обычном Блокноте.")
+    print("  python kuznechik.py encrypt cbc <input_file> <output_file> <key_hex> <iv_hex>")
+    print("  python kuznechik.py decrypt cbc <input_file> <output_file> <key_hex> <iv_hex>")
+    print()
+    print("Где:")
+    print("  encrypt / decrypt - операция")
+    print("  ecb / cbc         - режим шифрования")
+    print("  input_file        - входной файл")
+    print("  output_file       - выходной файл")
+    print("  key_hex           - ключ длиной 64 hex-символа")
+    print("  iv_hex            - IV для CBC длиной 32 hex-символа")
 
 
 def main():
-    """Точка входа: разбор аргументов командной строки и запуск нужного режима."""
-    if len(sys.argv) != 5:
+    """Точка входа в программу."""
+    if len(sys.argv) not in (6, 7):
         print("Ошибка: неверное количество аргументов.")
         print_usage()
         return
 
-    mode = sys.argv[1].lower()
-    input_file = sys.argv[2]
-    output_file = sys.argv[3]
-    key_hex = sys.argv[4].strip()
+    operation = sys.argv[1].lower()
+    cipher_mode = sys.argv[2].lower()
+    input_file = sys.argv[3]
+    output_file = sys.argv[4]
+    key_hex = sys.argv[5].strip()
+    iv_hex = sys.argv[6].strip() if len(sys.argv) == 7 else None
+
+    if operation not in ("encrypt", "decrypt"):
+        print("Ошибка: операция должна быть 'encrypt' или 'decrypt'.")
+        print_usage()
+        return
+
+    if cipher_mode not in ("ecb", "cbc"):
+        print("Ошибка: режим должен быть 'ecb' или 'cbc'.")
+        print_usage()
+        return
 
     if len(key_hex) != 64:
         print("Ошибка: ключ должен содержать 64 hex-символа.")
@@ -337,16 +411,30 @@ def main():
         print("Ошибка: ключ должен быть в корректном hex-формате.")
         return
 
+    if cipher_mode == "cbc":
+        if iv_hex is None:
+            print("Ошибка: для режима CBC необходимо указать IV.")
+            return
+        if len(iv_hex) != 32:
+            print("Ошибка: IV для CBC должен содержать 32 hex-символа.")
+            return
+        try:
+            bytes.fromhex(iv_hex)
+        except ValueError:
+            print("Ошибка: IV должен быть в корректном hex-формате.")
+            return
+
+    if cipher_mode == "ecb" and iv_hex is not None:
+        print("Ошибка: для режима ECB IV указывать не нужно.")
+        return
+
     try:
-        if mode == "encrypt":
-            encrypt_file(input_file, output_file, key_hex)
+        if operation == "encrypt":
+            encrypt_file(input_file, output_file, key_hex, cipher_mode, iv_hex)
             print("Файл успешно зашифрован.")
-        elif mode == "decrypt":
-            decrypt_file(input_file, output_file, key_hex)
-            print("Файл успешно расшифрован.")
         else:
-            print("Ошибка: режим должен быть 'encrypt' или 'decrypt'.")
-            print_usage()
+            decrypt_file(input_file, output_file, key_hex, cipher_mode, iv_hex)
+            print("Файл успешно расшифрован.")
     except Exception as e:
         print(f"Ошибка при выполнении программы: {e}")
 
