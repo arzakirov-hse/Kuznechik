@@ -39,7 +39,8 @@
 
 Реализованная программа поддерживает:
 
-- чтение данных из входного файла
+- чтение данных из любого входного файла (текстового или бинарного)
+- отображение исходных данных в текстовом и hex-формате в консоли
 - ввод секретного ключа
 - выбор режима работы:
   - **шифрование**
@@ -51,8 +52,7 @@
 - автоматическое **добавление padding**
 - удаление padding после расшифрования
 - сохранение результата в новый файл
-- работу с данными в **шестнадцатеричном формате (hex)**
-
+- отображение зашифрованных и расшифрованных данных в hex в консоли
 ---
 
 # Используемые технологии
@@ -96,7 +96,7 @@ cd Kuznechik
 
 Программа запускается из командной строки.
 
-## Шифрование (режим ECB)
+## Зашифрование (режим ECB)
 
 ```bash
 python kuznechik.py encrypt ecb input.txt output.txt <key>
@@ -112,7 +112,7 @@ python kuznechik.py decrypt ecb input.txt output.txt <key>
 
 ---
 
-## Шифрование (режим CBC)
+## Зашифрование (режим CBC)
 
 ```bash
 python kuznechik.py encrypt cbc input.txt output.txt <key> <iv>
@@ -160,25 +160,12 @@ python kuznechik.py decrypt cbc input.txt output.txt <key> <iv>
 
 ---
 
-# Формат входных данных
-
-Входные файлы должны содержать данные **в шестнадцатеричном формате (hex)**.
-
-Пример содержимого файла:
-
-```
-1122334455667700ffeeddccbbaa9988
-```
-
-Файлы можно редактировать в обычном текстовом редакторе (например, **Блокнот**).
-
----
 
 # Пример работы программы
 
 ## Исходные данные
 
-Открытый текст:
+Открытый текст (HEX):
 
 ```
 1122334455667700ffeeddccbbaa9988
@@ -195,20 +182,20 @@ python kuznechik.py decrypt cbc input.txt output.txt <key> <iv>
 ## Шифрование
 
 ```bash
-python kuznechik.py encrypt ecb input.txt output.txt 8899aabbccddeeff0011223344556677fedcba98765432100123456789abcdef
+python kuznechik.py encrypt ecb input_ecb.txt output_ecb.txt 8899aabbccddeeff0011223344556677fedcba98765432100123456789abcdef
 ```
 
-Результат шифрования будет записан в файл `output.txt`.
+Результат шифрования будет записан в файл `output_ecb.txt`.
 
 ---
 
 ## Расшифрование
 
 ```bash
-python kuznechik.py decrypt ecb output.txt result.txt 8899aabbccddeeff0011223344556677fedcba98765432100123456789abcdef
+python kuznechik.py decrypt ecb  output_ecb.txt result_ecb.txt 8899aabbccddeeff0011223344556677fedcba98765432100123456789abcdef
 ```
 
-Результат расшифрования будет записан в файл `result.txt`.
+Результат расшифрования будет записан в файл `result_ecb.txt`.
 
 ---
 
@@ -218,10 +205,12 @@ python kuznechik.py decrypt ecb output.txt result.txt 8899aabbccddeeff0011223344
 Kuznechik/
 │
 ├── kuznechik.py      # реализация алгоритма
-├── input.txt         # пример входных данных
-├── output.txt        # результат шифрования (ecb)
-├── output_cbc.txt        # результат шифрования (cbc)
-├── result.txt        # результат расшифрования
+├── input_ecb.txt         # пример входных данных для зашифрования в режиме ECB
+├── input_cbc.txt         # пример входных данных для зашифрования в режиме CBC
+├── output_ecb.txt        # результат зашифрования входных данных в режиме ECB
+├── output_cbc.txt        # результат зашифрования входных данных в режиме CBC
+├── result_ecb.txt        # результат расшифрования зашифрованного текста в режиме ECB
+├── result_cbc.txt        # результат расшифрования зашифрованного текста в режиме CBC
 └── README.md         # описание проекта
 
 ```
